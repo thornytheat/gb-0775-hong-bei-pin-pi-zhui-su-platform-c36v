@@ -1,12 +1,13 @@
 from fractions import Fraction
 
-from flask import Blueprint,render_template,request
+from flask import Blueprint,current_app,render_template,request
 
 from app.api import cabinet
 from app.config import RULE_VERSION
 from app.errors import RoastError
 from app.modules.proof.recall import recall
 from app.modules.proof.service import verify_and_export
+from app.modules.transfers.service import seed_demo
 from app.pipeline import compute
 from app.reasons import REASONS
 from app.source import receive
@@ -38,7 +39,14 @@ def counter(view='balance'):
         raise RoastError('NO_WORK','找不到该工作批',404)
     proof=verify_and_export(document) if document and view=='proof' else None
     packages=proof['packages'] if proof else recall(reports) if view=='proof' else {}
+    transfer=None
+    if view=='balance':
+        ledger=current_app.extensions.get('transfer_ledger')
+        if request.args.get('demo')=='1' and ledger is not None:
+            seed_demo(ledger)
+        if ledger is not None:
+            transfer=ledger.overview()
     return render_template('base.html',view=view,panels=PANELS,records=reports,codebook=REASONS, sample=sample, key=key,
                            manifest=document['manifest'] if document else None, work=work, rule=RULE_VERSION,
-                           proof=proof,packages=packages,dest=DEST,mass=mass,
+                           proof=proof,packages=packages,dest=DEST,mass=mass,transfer=transfer,
                            history=cabinet().recent() if view=='runs' else [])

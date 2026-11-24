@@ -13,6 +13,24 @@ def cabinet():
     return current_app.extensions['lot_cabinet']
 
 
+def transfer_ledger():
+    return current_app.extensions.get('transfer_ledger')
+
+
+@api.route('/lots/transfers', methods=['GET', 'POST'])
+@api.route('/lots/transfer', methods=['GET', 'POST'])
+def check_transfers():
+    from app.modules.transfers.service import app_ledger
+    ledger = transfer_ledger() or app_ledger()
+    body = request.get_json(silent=True) if request.method == 'POST' else None
+    if isinstance(body, dict) and body.get('action'):
+        action = body.pop('action')
+        if action not in ('sign', 'feed', 'cancel', 'receive', 'consume', 'dispatch'):
+            raise RoastError('NO_ACTION', '未知调拨动作', 404)
+        return jsonify(getattr(ledger, action)(**body))
+    return jsonify(ledger.overview())
+
+
 @api.route('/lots/<phase>',methods=['GET','POST'])
 def check(phase):
     if phase not in PHASES:

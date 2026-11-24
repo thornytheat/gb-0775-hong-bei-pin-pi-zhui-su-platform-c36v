@@ -12,6 +12,9 @@
 2. 在投入来源核验查 RT-A 的两次领用，再查 RT-D 的 120 g 争抢。前者全部核入，后者 100 g 保留在库。
 3. 在拼批图比例传递选择 BA-03，查看两级返料的来源贡献。切换 BA-09 查看循环证据。
 4. 从批次留档复跑进行归档，再进入配方证据签发。打印卷联或下载 JSON，复核 PK-C 的 275 g 产地构成。
+5. 在重量守恒追溯页底部“跨车间调拨单核对”点开“载入演示调拨流”：查看发出未签收冻结、分批签收、投料后退单只退余料，以及产地克重对平。
+
+调拨接口：`GET /api/transfers` 看台账与守恒核对，`POST /api/transfers/stock` 立车间库存，`POST /api/transfers` 开调拨单，`POST /api/transfers/<单号>/sign|feed|cancel` 分别签收、投料、退单（退单与投料并发由台账锁裁决，退单重试幂等）。
 
 `GET /api/lots/<phase>` 分阶段预览样例。向同路径 POST `{"files":{"origins":"...","jobs":"...","inputs":"...","outputs":"..."}}` 可试算自己的 CSV。`POST /api/runs` 接受同样的文件集合或 `{"sample":"dirty"}`。`GET /api/runs/<id>` 查归档，`POST /api/runs/<id>/rerun` 复算，`GET /api/export/<id>` 下载证据。
 

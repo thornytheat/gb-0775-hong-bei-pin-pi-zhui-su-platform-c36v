@@ -3,7 +3,7 @@ from fractions import Fraction
 from .stock import stock
 
 
-def verify_mass(intake, trace, packing):
+def verify_mass(intake, trace, packing, transfer_ledger=None):
     jobs={}
     for work, recipe in trace['jobs'].items():
         dispatch=packing['jobs'][work]
@@ -19,5 +19,13 @@ def verify_mass(intake, trace, packing):
     packages={key:Fraction(row['g'])-sum(Fraction(g) for g in row['origin_g'].values()) for key,row in packing['packages'].items()}
     balanced=warehouse['balanced'] and not any(line_delta.values()) and not any(packages.values())
     balanced=balanced and all(row['delta_g']==row['origin_delta_g']=='0' for row in jobs.values())
-    return dict(jobs=jobs,warehouse=warehouse,line_delta=line_delta,balanced=balanced,
+    result=dict(jobs=jobs,warehouse=warehouse,line_delta=line_delta,balanced=balanced,
                 package_delta_g={key:str(value) for key,value in packages.items()})
+    if transfer_ledger is not None:
+        transfer_report=transfer_ledger.overview() if hasattr(transfer_ledger,'overview') else transfer_ledger
+        result['transfers']=transfer_report.get('orders',[])
+        result['transfer_orders']=result['transfers']
+        result['transfer_reconciliation']=transfer_report.get('reconciliation')
+        result['transfer_balanced']=transfer_report.get('balanced')
+        result['balanced']=balanced and bool(transfer_report.get('balanced'))
+    return result

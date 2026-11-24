@@ -1,0 +1,115 @@
+{% if transfer is defined and transfer %}
+{% set audit = transfer.reconciliation %}
+<section class="panel transfer-book" id="transfer-orders" data-testid="transfer-ledger">
+  <div class="heading">
+    <h2>跨车间调拨单核对</h2>
+    <span class="transfer-subtitle">库存调拨 · 车间交接 · 在途冻结</span>
+    <mark class="{{ 'pass' if audit.balanced else 'hold' }}">{{ '调拨产地克重已对平' if audit.balanced else '调拨克重有差额' }}</mark>
+  </div>
+  <p class="transfer-rule">签收多少即可投多少；发出未签收的料在途冻结、两边都领不到；分批签收只增已签额度。退单时已投部分仍计接收方用料，其余（在途＋已签未投）退回发料方。退单重试不重复退料，并发退单/投料由台账锁串行裁决，同一份料只有一个去向。</p>
+
+  <div class="transfer-toolbar">
+    <a class="download" href="{{ url_for('roast_station.counter', view='balance', demo=1, sample=sample, run=key) }}">载入演示调拨流</a>
+    <a class="download" href="{{ url_for('roast_station.counter', view='balance', sample=sample, run=key) }}">刷新核对</a>
+    <span>单调 {{ transfer.order_count }} 张 · 核对 {{ audit.orders_checked }} 张 · 总差 {{ mass(audit.delta_g) }} g</span>
+  </div>
+
+  <form class="transfer-create" data-transfer-action="create" method="post" action="/api/transfers">
+    <label>返料卷 <input name="roll" value="RT-A" required></label>
+    <label>发料车间 <input name="from_workshop" value="打卷车间" required></label>
+    <label>接收车间 <input name="to_workshop" value="包装一车间" required></label>
+    <label>发出 g <input name="quantity_g" type="number" min="1" step="any" value="100" required></label>
+    <label>产地组成(可选) <input name="origin_g_text" placeholder="ET-01:6,BR-08:4"></label>
+    <button type="submit">发出并开调拨单</button>
+    <span class="transfer-msg" data-msg></span>
+  </form>
+
+  <div class="table-wrap">
+    <table class="transfer-stock">
+      <thead><tr><th>车间</th><th>返料卷</th><th>在库可领 g</th><th>其中已投 g</th><th>产地在库组成</th></tr></thead>
+      <tbody>
+      {% for row in transfer.stock %}
+        <tr>
+          <td>{{ row.workshop }}</td><td>{{ row.roll }}</td>
+          <td>{{ mass(row.available_g) }}</td><td>{{ mass(row.used_g) }}</td>
+          <td>{% for o,g in row.origin_g.items() %}{{ o }} {{ mass(g) }}g{% if not loop.last %}；{% endif %}{% endfor %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5">尚无车间库存，可先在下方单据开单，或点“载入演示调拨流”。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-wrap">
+    <table class="transfer-orders-table">
+      <thead><tr>
+        <th>调拨单</th><th>返料卷</th><th>发料 → 接收</th><th>状态</th>
+        <th>发出 g</th><th>已签 g</th><th>在途未签 g</th><th>已投 g</th>
+        <th>已签可投 g</th><th>退回发料 g</th><th>产地差 g</th><th>操作</th>
+      </tr></thead>
+      <tbody>
+      {% for o in transfer.orders %}
+        <tr data-order="{{ o.id }}">
+          <th scope="row">{{ o.id }}</th>
+          <td>{{ o.roll }}</td>
+          <td>{{ o.from_workshop }} → {{ o.to_workshop }}</td>
+          <td><mark class="{{ 'pass' if o.balanced else 'hold' }}">{{ o.status_cn }}</mark></td>
+          <td>{{ mass(o.quantity_g) }}</td>
+          <td>{{ mass(o.signed_g) }}</td>
+          <td>{{ mass(o.in_transit_g) }}</td>
+          <td>{{ mass(o.fed_g) }}</td>
+          <td>{{ mass(o.claimable_g) }}</td>
+          <td>{{ mass(o.returned_g) }}</td>
+          <td class="{{ 'pass' if o.balanced else 'hold' }}">{% for k,v in o.origin_delta_g.items() %}{{ k }}:{{ mass(v) }}g {% else %}0{% endfor %}</td>
+          <td class="transfer-actions">
+            {% if o.status != 'cancelled' and o.in_transit_g != '0' %}
+            <form data-transfer-action="sign" method="post" action="/api/transfers/{{ o.id }}/sign">
+              <input name="quantity_g" type="number" min="0" step="any" placeholder="签收g，空=全签" style="width:7.5em">
+              <button type="submit">分批签收</button>
+            </form>
+            {% endif %}
+            {% if o.status != 'cancelled' and o.claimable_g != '0' %}
+            <form data-transfer-action="feed" method="post" action="/api/transfers/{{ o.id }}/feed">
+              <input name="quantity_g" type="number" min="0" step="any" placeholder="投料g" style="width:6em">
+              <button type="submit">投料</button>
+            </form>
+            {% endif %}
+            {% if o.status != 'cancelled' %}
+            <form data-transfer-action="cancel" method="post" action="/api/transfers/{{ o.id }}/cancel">
+              <button type="submit" class="danger">退单/撤回余料</button>
+            </form>
+            {% else %}
+            <form data-transfer-action="cancel" method="post" action="/api/transfers/{{ o.id }}/cancel">
+              <button type="submit">重试退单</button>
+            </form>
+            {% endif %}
+            <span class="transfer-msg" data-msg></span>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="12">暂无调拨单。发出未签收的料两边都领不到；在此核对每张调拨单的签收、投料与退单去向。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-wrap">
+    <table class="transfer-origins">
+      <thead><tr><th>产地批</th><th>累计入库 g</th><th>车间在库 g</th><th>在途 g</th><th>接收方已投 g</th><th>差额 g</th></tr></thead>
+      <tbody>
+      {% for origin,row in audit.origins.items() %}
+        <tr>
+          <td>{{ origin }}</td><td>{{ mass(row.added_g) }}</td><td>{{ mass(row.stock_g) }}</td>
+          <td>{{ mass(row.transit_g) }}</td><td>{{ mass(row.fed_g) }}</td>
+          <td class="{{ 'pass' if row.delta_g == '0' else 'hold' }}">{{ mass(row.delta_g) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">调拨前后的产地克重将在此逐产地对平。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<script src="{{ url_for('static', filename='transfers.js') }}" defer></script>
+{% endif %}

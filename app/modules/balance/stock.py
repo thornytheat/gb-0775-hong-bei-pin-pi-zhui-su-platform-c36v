@@ -1,6 +1,18 @@
 from collections import Counter
 from fractions import Fraction
 
+# 跨车间调拨台账与本模块的库存余额核对放在同一命名空间
+from app.modules.transfers.ledger import TransferLedger  # noqa: F401
+from app.modules.transfers.reconcile import (  # noqa: F401
+    reconcile_ledger as reconcile_transfers, verify_transfers,
+)
+from app.modules.transfers.service import (  # noqa: F401
+    cancel_transfer, sign_transfer,
+)
+
+Stock = TransferLedger
+Warehouse = TransferLedger
+
 
 def stock(trace, packing):
     used=Counter()
